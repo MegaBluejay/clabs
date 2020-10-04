@@ -15,47 +15,39 @@ int *digits(int n) {
 }
 
 // 5
-
-int isExtra(char* str, char *p, int openSingle, int openDouble) {
-  if (*p != ' ') {
-    return 0;
-  }
-  if ((*(p+1) == ' ') ||
-      (*(p+1) == '\0' && (p==str || *(p-1) == '.' || *(p-1) == ' ')) ||
-      (*(p-1) == '\'' && openSingle) ||
-      (*(p-1) == '\"' && openDouble) ||
-      (*(p-1) == '(') ||
-      (*(p-1) == '[') ||
-      (*(p-1) == '{')) {
-    return 1;
-  }
-  return 0;
-}
-
-void fix(char *s, char *p, int os, int od) {
-  if (s==p) {
-    return;
-  }
-  if (isExtra(s,p,os,od)) {
-    char *t = p;
-    while (*t != '\0') {
-      *t = *(t+1);
-      t++;
+void fix(char *string, char *current, int open_single_quote, int open_double_quote) {
+  if (*current == ' ') {
+    if (*(current+1) == '\0' ||
+        current-1>=string && (*(current-1) == ' ' && *(current+1) == ' ' ||
+                              *(current-1) == '(' ||
+                              *(current-1) == '[' ||
+                              *(current-1) == '{' ||
+                              *(current-1) == '\'' && open_single_quote ||
+                              *(current-1) == '\"' && open_double_quote)) {
+      char *temp = current;
+      while(*temp != '\0') {
+        *temp = *(temp+1);
+        temp++;
+      }
+      current++;
     }
   }
-  else if (*p == '\'') {
-    os = !os;
+  else if (*current == '\'') {
+    open_single_quote = !open_single_quote;
   }
-  else if (*p == '\"') {
-    od = !od;
+  else if (*current == '\"') {
+    open_double_quote = !open_double_quote;
   }
-  fix(s,p-1,os,od);
+  if (current==string) {
+    return;
+  }
+  fix(string, current-1, open_single_quote, open_double_quote);
 }
 
 int main() {
   // 3
   int n;
-  scanf("%d", &n);
+  scanf("%d\n", &n);
   int *ds = digits(n);
   for (int i=0; i<floor(log10(n))+1; i++) {
     printf("%d ", ds[i]);
@@ -63,10 +55,13 @@ int main() {
   printf("\n");
 
   // 5
-  char *str;
-  fgets(str, 100, stdin);
-  fix(str, strchr(str,'\0'), 0, 0);
-  printf("%s\n", str);
+  char string[100];
+  fgets(string, 100, stdin);
+  char *last = strchr(string,'\0')-1;
+  *last = '\0';
+  last-=1;
+  fix(string, last, 0, 0);
+  printf("%s\n", string);
   
   return 0;
 }

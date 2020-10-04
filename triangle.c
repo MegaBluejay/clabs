@@ -46,9 +46,9 @@ double perimeter(triangle tri) {
 int is_right(triangle tri) {
   int right = 0;
   for(int i=0; i<3; i++) {
-    vector v1 = vec(tri[i], tri[(i+1)%3]);
-    vector v2 = vec(tri[(i+1)%3], tri[(i+2)%3]);
-    right |= fabs(dot(v1, v2)) < 0.0001;
+    vector side1 = vec(tri[i], tri[(i+1)%3]);
+    vector side2 = vec(tri[(i+1)%3], tri[(i+2)%3]);
+    right |= fabs(dot(side1, side2)) < 0.0001;
   }
   return right;
 }
