@@ -1,11 +1,5 @@
 #include "triangle.h"
 
-/* typedef struct { */
-/*   double x,y; */
-/* } vector; */
-/* typedef vector point; */
-/* typedef point triangle[3]; */
-
 vector vec(point from, point to) {
   vector res;
   res.x = to.x-from.x;
@@ -44,11 +38,12 @@ double perimeter(triangle tri) {
 }
 
 int is_right(triangle tri) {
-  int right = 0;
   for(int i=0; i<3; i++) {
     vector side1 = vec(tri[i], tri[(i+1)%3]);
     vector side2 = vec(tri[(i+1)%3], tri[(i+2)%3]);
-    right |= fabs(dot(side1, side2)) < 0.0001;
+    if (fabs(dot(side1, side2)) < 0.0001) {
+      return 1;
+    }
   }
-  return right;
+  return 0;
 }

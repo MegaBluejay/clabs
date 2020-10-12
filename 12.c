@@ -1,10 +1,10 @@
 #include <stdio.h>
 #include <time.h>
 
-const int max_line_len = 300;
+const int MAX_LINE_LEN = 300;
 
 int main(int argc, char *argv[]) {
-  char line[max_line_len];
+  char line[MAX_LINE_LEN];
   FILE *file_to_concat_to = fopen(argv[3], "w");
   
   FILE *file_to_concat = fopen(argv[1], "r");
