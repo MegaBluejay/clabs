@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 const int BUFFER_SIZE = 100;
 const int MAX_FRAMES = 100;
@@ -79,15 +80,14 @@ int read_props(char output[MAX_FRAMES*2][BUFFER_SIZE], FILE* stream) {
   return frame_number;
 }
 
-char* get_prop(char props[MAX_FRAMES*2][BUFFER_SIZE], int n_frames, char* prop_name) {
-  char buffer[BUFFER_SIZE];
+int get_prop(char* buffer, char props[MAX_FRAMES*2][BUFFER_SIZE], int n_frames, char* prop_name) {
   for (int i=0; i<n_frames; i++) {
     if (!strcmp(props[i*2], prop_name)) {
       strcpy(buffer, props[i*2+1]);
-      return buffer;
+      return 0;
     }
   }
-  return NULL;
+  return 1;
 }
 
 int set_prop(char props[MAX_FRAMES*2][BUFFER_SIZE], int n_frames, char* prop_name, char* prop_value) {
@@ -109,7 +109,7 @@ void write_props(char input[MAX_FRAMES*2][BUFFER_SIZE], int n_frames, FILE* stre
   int current_tag_size = 0;
   fread(buffer, 1, 3, stream);
   if (!strncmp(buffer, "ID3", 3)) {
-    fseek(stream, 3);
+    fseek(stream, 3, SEEK_CUR);
     fread(buffer, 1, 4, stream);
     for (int i=0; i<4; i++) {
       current_tag_size += buffer[i]<<(7*(3-i));
@@ -122,61 +122,136 @@ void write_props(char input[MAX_FRAMES*2][BUFFER_SIZE], int n_frames, FILE* stre
     new_tag_size+=10+strlen(input[i*2+1]);
   }
 
+  // only change the file size if we need to
   if (new_tag_size>current_tag_size) {
-    
+    // get total file size and calculate mp3 size
+    fseek(stream, 0, SEEK_END);
+    int mp3_size = ftell(stream)-current_tag_size;
+
+    // read mp3 data into memory
+    fseek(stream, current_tag_size, SEEK_SET);
+    char* mp3 = malloc(mp3_size);
+    fread(mp3, 1, mp3_size, stream);
+
+    //write it back moved to where it needs to go and release memory
+    fseek(stream, new_tag_size, SEEK_SET);
+    fwrite(mp3, 1, mp3_size, stream);
+    free(mp3);
+
+    // write new tag header ;todo test this
+    fseek(stream, 0, SEEK_SET);
+    char new_header[6];
+    strncpy(new_header, "ID3", 3);
+    new_header[3] = 3;
+    fwrite(new_header, 1, 6, stream);
+    int size_calc = new_tag_size<<4;
+    int mask = ((1<<7)-1)<<25;
+    for (int i=0; i<4; i++) {
+      fputc(size_calc & mask, stream);
+      size_calc = size_calc << 7;
+    }
+  }
+  else {
+    fseek(stream, new_tag_size, SEEK_SET);
+    if (new_tag_size<current_tag_size-4) {
+      for (int i=0; i<4; i++) {
+        fputc(0,stream);
+      }
+    }
+    else {
+      for (int i=0; i<current_tag_size-new_tag_size; i++) {
+        fputc(0, stream);
+      }
+    }
+    fseek(stream, 10, SEEK_SET);
+  }
+  for (int i=0; i<n_frames; i++) {
+    fwrite(input[i*2], 1, 4, stream);
+    int frame_size = strlen(input[i*2+1])+1;
+    int size_calc = frame_size;
+    for (int i=0; i<4; i++) {
+      fputc(size_calc>>24, stream);
+      size_calc = size_calc<<8;
+    }
+    for (int i=0; i<3; i++) {
+      fputc(0, stream);
+    }
+    fwrite(input[i*2+1], 1, frame_size-1, stream);
   }
 }
 
-int main() {
-  FILE* f = fopen("/home/archer/c/never.mp3", "rb");
-  char out[MAX_FRAMES*2][BUFFER_SIZE];
-
-  int n = read_props(out, f);
-  fclose(f);
-  printf("%d\n", n);
-  for(int i=0; i<n; i++) {
-    printf("%s=%s\n",out[i*2], out[i*2+1]);
+int main(int argc, char *argv[]) {
+  int show=0, set=0, get=0;
+  char *filepath, *prop_name, *prop_value;
+  for (int i=1; i<argc; i++) {
+    char *arg_name;
+    arg_name = strtok(&(argv[i][2]), "=");
+    if (!strcmp(arg_name, "filepath")) {
+      filepath = strtok(NULL, "=");
+    }
+    else if (!strcmp(arg_name, "show")) {
+      show = 1;
+    }
+    else if (!strcmp(arg_name, "set")) {
+      set = 1;
+      prop_name = strtok(NULL, "=");
+    }
+    else if (!strcmp(arg_name, "value")) {
+      prop_value = strtok(NULL, "=");
+    }
+    else if (!strcmp(arg_name, "get")) {
+      get = 1;
+      prop_name = strtok(NULL, "=");
+    }
+  }
+  
+  if (filepath) {
+    FILE* file =  fopen(filepath, "rb+");
+    char props[MAX_FRAMES*2][BUFFER_SIZE];
+    int n = read_props(props, file);
+    if (show) {
+      for (int i=0; i<n; i++) {
+        printf("%s=%s\n", props[i*2], props[i*2+1]);
+      }
+    }
+    else if (get) {
+      if (prop_name) {
+        char buffer[BUFFER_SIZE];
+        if (!get_prop(buffer, props, n, prop_name)) {
+          printf("%s\n", buffer);
+        }
+        else {
+          printf("no such prop");
+        }
+      }
+      else {
+        printf("no prop name given\n");
+      }
+    }
+    else if (set) {
+      if (prop_name && prop_value) {
+        fseek(file, 0, SEEK_SET);
+        n += set_prop(props, n, prop_name, prop_value);
+        for (int i=0; i<n; i++) {
+          printf("%s=%s\n", props[i*2], props[i*2+1]);
+        }
+        write_props(props, n, file);
+      }
+      else {
+        if (!prop_name) {
+          printf("no prop name given\n");
+        }
+        if (!prop_value) {
+          printf("no prop value given\n");
+        }
+      }
+    }
+    else {
+      printf("invalid arguements\n");
+    }
+    fclose(file);
+  }
+  else {
+    printf("no filepath given\n");
   }
 }
-
-/* int main(int argc, char *argv[]) { */
-/*   int show=0, set=0, get=0; */
-/*   char *filepath, *prop_name, *prop_value; */
-/*   for (int i=1; i<argc; i++) { */
-/*     char *arg_name; */
-/*     arg_name = strtok(&(argv[i][2]), "="); */
-/*     if (!strcmp(arg_name, "filepath")) { */
-/*       filepath = strtok(NULL, "="); */
-/*     } */
-/*     else if (!strcmp(arg_name, "show")) { */
-/*       show = 1; */
-/*     } */
-/*     else if (!strcmp(arg_name, "set")) { */
-/*       set = 1; */
-/*       prop_name = strtok(NULL, "="); */
-/*     } */
-/*     else if (!strcmp(arg_name, "value")) { */
-/*       prop_value = strtok(NULL, "="); */
-/*     } */
-/*     else if (!strcmp(arg_name, "get")) { */
-/*       get = 1; */
-/*       prop_name = strtok(NULL, "="); */
-/*     }  */
-/*   } */
-/*   printf("%s\n", filepath); */
-/*   if (show) { */
-/*     printf("show\n"); */
-/*   } */
-/*   if (set || get) { */
-/*     if (set) { */
-/*       printf("set\n"); */
-/*     } */
-/*     if (get) { */
-/*       printf("get\n"); */
-/*     } */
-/*     printf("%s\n", prop_name); */
-/*     if (set) { */
-/*       printf("%s\n", prop_value); */
-/*     } */
-/*   } */
-/* } */
