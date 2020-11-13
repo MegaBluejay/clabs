@@ -9,13 +9,13 @@ typedef struct {
 typedef vector point;
 typedef point triangle[3];
 
-extern vector vec(point from, point to);
-extern double norm(vector v);
-extern double dot(vector v1, vector v2);
-extern double cross(vector v1, vector v2);
-extern double distance(point p1, point p2);
-extern double area(triangle tri);
-extern double perimeter(triangle tri);
-extern int is_right(triangle tri);
+vector vec(point from, point to);
+double norm(vector v);
+double dot(vector v1, vector v2);
+double cross(vector v1, vector v2);
+double distance(point p1, point p2);
+double area(triangle tri);
+double perimeter(triangle tri);
+int is_right(triangle tri);
 
 #endif
