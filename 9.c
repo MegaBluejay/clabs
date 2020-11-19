@@ -2,7 +2,7 @@
 #include <math.h>
 
 // 3
-const char *digits[] = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"};
+const char* digits[] = {"zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"};
 
 int main() {
   // 3

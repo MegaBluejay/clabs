@@ -58,8 +58,7 @@ int main() {
   char string[100];
   fgets(string, 100, stdin);
   char *last = strchr(string,'\0')-1;
-  *last = '\0';
-  last-=1;
+  *(last--) = '\0';
   fix(string, last, 0, 0);
   printf("%s\n", string);
   
