@@ -221,7 +221,7 @@ int main(int argc, char *argv[]) {
           printf("%s\n", buffer);
         }
         else {
-          printf("no such prop");
+          printf("no such prop\n");
         }
       }
       else {
