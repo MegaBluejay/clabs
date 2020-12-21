@@ -1,147 +1,196 @@
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
+#include <stdlib.h>
 
 typedef struct {
-  int* array;
+  int *array;
   int has;
-  int size;
+  int n;
 } dynamic;
 
-void init(dynamic* dyn, int size) {
-  dyn->size = size;
+dynamic *init_dyn (int n) {
+  dynamic *dyn = malloc(sizeof(dynamic));
+  dyn->n = n;
   dyn->has = 0;
-  dyn->array = malloc(sizeof(int)*size);
+  dyn->array = malloc(sizeof(int)*n);
 }
 
-void dyn_free(dynamic* dyn) {
+void del_dyn (dynamic *dyn) {
   free(dyn->array);
-  dyn->has = 0;
-  dyn->size = 0;
+  free(dyn);
 }
 
-void append_cell(dynamic* live, int x, int y) {
-  live->has += 2;
-  if (live->has >= live->size) {
-    live->size = live->has * 2;
-    live->array = realloc(live->array, live->size);
+void print_cells(dynamic *dyn) {
+  for (int i=0; i<dyn->has/2; i++) {
+    printf("(%d, %d), ", dyn->array[i*2], dyn->array[i*2+1]);
   }
-  live->array[live->has-2] = x;
-  live->array[live->has-1] = y;
+  printf("\n");
 }
 
-int is_neigh(int x1, int y1, int x2, int y2) {
-  return abs(x1-x2)<=1 && abs(y1-y2)<=1 && (x1!=x2 || y1!=y2);
+void append_cell(dynamic *cells, int x, int y) {
+  if (cells->has+2>cells->n) {
+    cells->n *= 2;
+    int *new_array = malloc(sizeof(int)*cells->n);
+    memcpy(new_array, cells->array, cells->has);
+    free(cells->array);
+    cells->array = new_array;
+  }
+  cells->array[cells->has] = x;
+  cells->array[cells->has+1] = y;
+  cells->has += 2;
 }
 
-dynamic* next_gen(dynamic* live) {
-  dynamic* new_live;
-  init(new_live, live->has * 2);
-  for (int i=0; i < live->has / 2; i+=2) {
-    int x = live->array[i];
-    int y = live->array[i+1];
-    int n_main = 0;
-    for (int j=0; j < live->has / 2; j+=2) {
-      int x_neigh = live->array[j];
-      int y_neigh = live->array[j+1];
-      if (is_neigh(x, y, x_neigh, y_neigh)) {
-        n_main+=1;
-      }
+int has_cell(dynamic *cells, int x, int y) {
+  for (int i=0; i<cells->has/2; i++) {
+    if (cells->array[i*2]==x && cells->array[i*2+1]==y) {
+      return 1;
     }
-    if (2<=n_main && n_main<=3) {
-      append_cell(new_live, x, y);
+  }
+  return 0;
+}
+
+int pop_cell (dynamic *cells, int x, int y) {
+  for (int i=0; i<cells->has/2; i++) {
+    if (cells->array[i*2]==x && cells->array[i*2+1]==y) {
+      cells->array[i*2] = -1;
+      cells->array[i*2+1] = -1;
+      return 1;
     }
+  }
+  return 0;
+}
+
+dynamic *next_gen(dynamic *live) {
+  dynamic *new_live = init_dyn(live->n);
+  dynamic *neigh1 = init_dyn(live->n*9);
+  dynamic *neigh2 = init_dyn(live->n*9);
+  dynamic *neigh3 = init_dyn(live->n*9);
+  for (int i=0; i<live->has/2; i++) {
+    int x = live->array[i*2];
+    int y = live->array[i*2+1];
+    int n_neighs = 0;
     for (int dx=-1; dx<=1; dx++) {
       for (int dy=-1; dy<=1; dy++) {
-        int n_second = 0;
-        for (int j=0; j < live->has / 2; j+=2) {
-          int x_neigh = live->array[j];
-          int y_neigh = live->array[j+1];
-          if (x_neigh==x+dx && y_neigh==y+dy) {
-            n_second = 0;
-            break;
+        if ((dx!=0 || dy!=0) && x+dx>=0 && y+dy>=0) {
+          if (has_cell(live, x+dx, y+dy)) {
+            n_neighs++;
           }
-          if (is_neigh(x+dx, y+dy, x_neigh, y_neigh)) {
-            n_second+=1;
+          else {
+            if (pop_cell(neigh3, x+dx, y+dy)) {
+              // over 3, don't care
+            }
+            else if (pop_cell(neigh2, x+dx, y+dy)) {
+              append_cell(neigh3, x+dx, y+dy);
+            }
+            else if (pop_cell(neigh1, x+dx, y+dy)) {
+              append_cell(neigh2, x+dx, y+dy);
+            }
+            else {
+              append_cell(neigh1, x+dx, y+dy);
+            }
           }
-        }
-        if (n_second==3) {
-          append_cell(new_live, x+dx, y+dy);
         }
       }
     }
+    if (2<=n_neighs && n_neighs<=3) {
+      append_cell(new_live, x, y);
+    }
   }
-  dyn_free(live);
+  for (int i=0; i<neigh3->has/2; i++) {
+    int x = neigh3->array[i*2];
+    int y = neigh3->array[i*2+1];
+    if (x!=-1 && y!=-1) {
+      append_cell(new_live, x, y);
+    }
+  }
+  del_dyn(neigh1);
+  del_dyn(neigh2);
+  del_dyn(neigh3);
+  del_dyn(live);
   return new_live;
 }
 
-int ceil_div(int x, int y) {
-  return (x+y-1)/y;
+typedef struct {
+  int *array;
+  int h;
+  int wi;
+} bitmap;
+
+void del_map(bitmap *map) {
+  free(map->array);
+  free(map);
 }
 
-void read_bmp(FILE* file, dynamic* live) {
-  int data_offset;
-  int w,h;
-  fseek(file, 10, SEEK_CUR);
-  fread(&data_offset, 4, 1, file);
-  fseek(file, 4, SEEK_CUR);
-  fread(&w, 4, 1, file);
-  fread(&h, 4, 1, file);
+bitmap *to_map(dynamic *live) {
+  int mx = -1;
+  for (int i=0; i<live->has/2; i++) {
+    int x = live->array[i*2];
+    int y = live->array[i*2+1];
+    if (x>mx) {
+      mx = x;
+    }
+    if (y>mx) {
+      mx = y;
+    }
+  }
+  int w = mx+1;
+  int wi = ((w-1)>>5)+1;
+  int h = wi<<5;
+  bitmap *map = malloc(sizeof(bitmap));
+  map->h = h;
+  map->wi = wi;
+  map->array = calloc(h*wi, sizeof(int));
+  for (int i=0; i<live->has/2; i++) {
+    int x = live->array[i*2];
+    int y = live->array[i*2+1];
+    int xi = x>>5;
+    int xr = x-(xi<<5);
+    map->array[y*wi+xi] |= 1<<(31-xr);
+  }
+  return map;
+}
 
-  fseek(file, data_offset, SEEK_SET);
-  int line_len = ceil_div(w, 32);
-  init(live, w*h/5);
-  int* line = malloc(4*line_len);
-  for (int i=0; i<h; i++) {
-    fread(&line, 4, line_len, file);
-    for (int j=0; j<w; j++) {
-      int pixel = (line[j/32]>>(31-j%32))&1;
-      if (pixel) {
-        append_cell(live, j, i);
+dynamic *from_map(bitmap *map) {
+  dynamic *live = init_dyn(map->h*map->wi*32);
+  for (int i=0; i<map->h; i++) {
+    for (int j=0; j<map->wi; j++) {
+      for (int k=0; k<32; k++) {
+        int pixel = (map->array[i*map->wi+j]>>(31-k))&1;
+        if (pixel) {
+          append_cell(live, j*32+k, i);
+        }
       }
     }
   }
-  free(line);
+  return live;
 }
 
-void write_bmp(FILE* file, dynamic* live) {
+void write_bmp(bitmap *map, FILE* file) {
+  fseek(file, 0, SEEK_SET);
   fputs("BM", file);
-
-  int w = 0, h = 0;
-  for (int i=0; i < live->has / 2; i+=2) {
-    int x = live->array[i];
-    int y = live->array[i+1];
-    if (x+1>w) {
-      w = x+1;
-    }
-    if (y+1>h) {
-      h = y+1;
-    }
-  }
-  int line_len = 32*ceil_div(w, 32);
-  int data_size = line_len*h;
-  int offset = 14+40+8;
-  int full_size = offset+data_size;
-
-  fwrite(&full_size, 4, 1, file);
+  int data_size = 4*map->h*map->wi;
+  int offset = 62;
+  int file_size = data_size+offset;
+  fwrite(&file_size, 4, 1, file);
   for (int i=0; i<4; i++) {
     fputc(0, file);
   }
   fwrite(&offset, 4, 1, file);
 
   int header_size = 40;
-  short planes = 1;
-  short bpp = 1;
-  int total_colors = 2;
+  int w = map->wi*32;
+  int one = 1;
+  int zero = 0;
+  int two = 2;
   fwrite(&header_size, 4, 1, file);
   fwrite(&w, 4, 1, file);
-  fwrite(&h, 4, 1, file);
-  fwrite(&planes, 2, 1, file);
-  fwrite(&bpp, 2, 1, file);
+  fwrite(&map->h, 4, 1, file);
+  fwrite(&one, 2, 1, file);
+  fwrite(&one, 2, 1, file);
   for (int i=0; i<16; i++) {
     fputc(0, file);
   }
-  fwrite(&total_colors, 4, 1, file);
+  fwrite(&two, 4, 1, file);
   for (int i=0; i<4; i++) {
     fputc(0, file);
   }
@@ -150,71 +199,101 @@ void write_bmp(FILE* file, dynamic* live) {
     fputc(0, file);
   }
   for (int i=0; i<3; i++) {
-    fputc(255, file);
+    fputc(0xFF, file);
   }
   fputc(0, file);
 
-  int* bitmap = calloc(data_size, 1);
-  for (int i=0; i < live->has / 2; i+=2) {
-    int x = live->array[i];
-    int y = live->array[i+1];
-    bitmap[y*line_len+x/32] |= 1<<(31-x%32);
+  //  fwrite(map->array, 4, map->h*map->wi, file);
+  for (int i=0; i<map->h*map->wi; i++) {
+    char buf[4];
+    char *t = (char *) &map->array[i];
+    for (int j=0; j<4; j++) {
+      buf[3-j] = *(t++);
+    }
+    fwrite(buf, 4, 1, file);
   }
-  fwrite(&bitmap, data_size, 1, file);
-  free(bitmap);
 }
 
-/* int main(int argc, char *argv[]) { */
-/*   char *input_file, *output_dir; */
-/*   int max_iter, dump_freq=1; */
-/*   for (int i=1; i<argc; i++) { */
-/*     if (!strcmp(argv[i], "input")) { */
-/*       input_file = argv[++i]; */
-/*     } */
-/*     else if (!strcmp(argv[i], "output")) { */
-/*       output_dir = argv[++i]; */
-/*     } */
-/*     else if (!strcmp(argv[i], "max_iter")) { */
-/*       sscanf(argv[++i], "%d", &max_iter); */
-/*     } */
-/*     else if (!strcmp(argv[i], "dump_freq")) { */
-/*       sscanf(argv[++i], "%d", &dump_freq); */
-/*     } */
-/*   } */
-/*   if (!input_file || !output_dir) { */
-/*     printf("arguement error"); */
-/*     exit(1); */
-/*   } */
-/*   FILE* ifile = fopen(input_file, "rb"); */
-/*   dynamic* live; */
-/*   read_bmp(ifile, live); */
-/*   fclose(ifile); */
-/*   char* ofile_path = malloc(strlen(output_dir)+19); */
-/*   char* number = ofile_path+strlen(output_dir); */
-/*   strcpy(ofile_path, output_dir); */
-/*   strcpy(number, "/gol_"); */
-/*   number += 5; */
-/*   for (int i=1; max_iter==0 || i<=max_iter; i++) { */
-/*     live = next_gen(live); */
-/*     if (i%dump_freq == 0) { */
-/*       int numlen = sprintf(number, "%d", i); */
-/*       strcpy(number+numlen, ".bmp"); */
-/*       FILE* ofile = fopen(ofile_path, "wb"); */
-/*       write_bmp(ofile, live); */
-/*       fclose(ofile); */
-/*     } */
-/*   } */
-/*   free(ofile_path); */
-/* } */
+bitmap *read_bmp(FILE* file) {
+  fseek(file, 2, SEEK_SET); // skip signature
+  int file_size;
+  fread(&file_size, 4, 1, file);
+  fseek(file, 4, SEEK_CUR); // skip reserved
+  int data_offset;
+  fread(&data_offset, 4, 1, file);
+  
+  fseek(file, 4, SEEK_CUR); // skip header size
+  int w;
+  fread(&w, 4, 1, file);
+  int h;
+  fread(&h, 4, 1, file);
+  fseek(file, data_offset, SEEK_SET); // skip rest of header and color table
+  bitmap *map = malloc(sizeof(bitmap));
+  map->h = h;
+  map->wi = ((w-1)>>5)+1;
+  map->array = malloc(sizeof(int)*map->h*map->wi);
+  //  fread(map->array, file_size-data_offset, 1, file);
+  for (int i=0; i<map->h*map->wi; i++) {
+    char buf[4];
+    for (int j=0; j<4; j++) {
+      fread(&buf[3-j], 1, 1, file);
+    }
+    memcpy(&map->array[i], buf, 4);
+  }
+  return map;
+}
 
-int main() {
-  dynamic* live;
-  init(live,10);
-  append_cell(live, 5,5);
-  append_cell(live, 5,6);
-  append_cell(live, 5,4);
-  FILE* ifile = fopen("./test.bmp", "wb");
-  write_bmp(ifile, live);
-  fclose(ifile);
-  dyn_free(live);
+int main(int argc, char *argv[]) {
+  char *input_str;
+  char *output_str;
+  int max_iter = -1;
+  int dump_freq = 1;
+  for (int i=1; i<argc; i+=2) {
+    if (!strcmp(argv[i], "--input")) {
+      input_str = argv[i+1];
+    }
+    else if (!strcmp(argv[i], "--output")) {
+      output_str = argv[i+1];
+    }
+    else if (!strcmp(argv[i], "--max_iter")) {
+      sscanf(argv[i+1], "%d", &max_iter);
+    }
+    else if (!strcmp(argv[i], "--dump_freq")) {
+      sscanf(argv[i+1], "%d", &dump_freq);
+    }
+    else {
+      printf("invalid args\n");
+      exit(1);
+    }
+  }
+  if (!input_str || !output_str) {
+    printf("required args not given\n");
+    exit(1);
+  }
+
+  dynamic *live;
+  bitmap *map;
+  FILE *init_file = fopen(input_str, "rb");
+  map = read_bmp(init_file);
+  fclose(init_file);
+  live = from_map(map);
+  del_map(map);
+  
+  char buffer[200];
+  int q = strlen(output_str)+1;
+  strcpy(buffer, output_str);
+  buffer[q-1] = '/';
+  for (int i=0; max_iter==-1 || i<max_iter; i++) {
+    if (i%dump_freq == 0) {
+      int w = q+sprintf(&buffer[q], "%d", i);
+      sprintf(&buffer[w], "%s", ".bmp");
+      
+      map = to_map(live);
+      FILE *file = fopen(buffer, "wb");
+      write_bmp(map, file);
+      fclose(file);
+      del_map(map);
+    }
+    live = next_gen(live);
+  }
 }
